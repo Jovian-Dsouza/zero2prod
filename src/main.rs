@@ -1,21 +1,14 @@
-use zero2prod::startup::run;
-use std::net::TcpListener;
 use zero2prod::configuration::get_configuration;
-use sqlx::PgPool;
-use tracing::subscriber::set_global_default;
-use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use zero2prod::startup::run;
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
+use sqlx::postgres::PgPool;
+use std::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
-    let formatting_layer = BunyanFormattingLayer::new("zero2prod".into(), std::io::stdout);
-    let subscriber = Registry::default()
-            .with(env_filter)
-            .with(formatting_layer)
-            .with(JsonStorageLayer);
-    set_global_default(subscriber).expect("Failed to set subscriber");
+    init_subscriber(get_subscriber("zero2prod".into(), "info".into()));
+
+    
 
     let configuration = get_configuration().expect("Failed to read configuration.");
     let connection_pool = PgPool::connect(&configuration.database.connection_string())
@@ -25,3 +18,4 @@ async fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind(address)?;
     run(listener, connection_pool)?.await
 }
+
