@@ -4,6 +4,21 @@ use sqlx::PgPool;
 use zero2prod::configuration::{get_configuration, DatabaseSettings};
 use uuid::Uuid;
 use sqlx::Executor;
+use zero2prod::telemetry::{get_subscriber, init_subscriber};
+use once_cell::sync::Lazy;
+
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let default_filter_level = "info".into();
+    let subscriber_name = "test".into();
+
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
+        init_subscriber(subscriber);
+    };
+});
 
 #[tokio::test]
 async fn health_check_works() {
@@ -22,6 +37,8 @@ pub struct TestApp {
 }
 
 async fn spawn_app() -> TestApp {
+    Lazy::force(&TRACING);
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind address");
     let port = listener.local_addr().unwrap().port();
     
@@ -72,7 +89,7 @@ async fn subscribe_returns_200_for_valid_form_data() {
         .await
         .expect("Failed to connect to Postgres.");
     let client = reqwest::Client::new();
-    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+    let body = "name=Tom&email=thomas_mann%40hotmail.com";
     let response = client
             .post(&format!("{}/subscriptions", &app_address))
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -87,8 +104,8 @@ async fn subscribe_returns_200_for_valid_form_data() {
         .fetch_one(&mut connection)
         .await
         .expect("Failed to fetch saved subscription.");
-    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
-    assert_eq!(saved.name, "le guin");
+    assert_eq!(saved.email, "thomas_mann@hotmail.com");
+    assert_eq!(saved.name, "Tom");
 }   
 
 #[tokio::test]
